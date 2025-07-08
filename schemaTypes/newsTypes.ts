@@ -25,6 +25,34 @@ export default defineType({
       validation: (Rule) => Rule.required(),
     }),
     defineField({
+      name: 'featured',
+      title: 'Featured',
+      type: 'boolean',
+      description: 'Mark this news item as featured content (maximum 4 items)',
+      initialValue: false,
+      validation: (Rule) =>
+        Rule.custom(async (value, context) => {
+          // Only validate if trying to set to true
+          if (!value) return true
+
+          // Get the current document ID to exclude it from the count
+          const currentDocId = context.document?._id?.replace('drafts.', '')
+
+          // Query for currently featured items
+          const client = context.getClient({apiVersion: '2023-05-03'})
+          const featuredCount = await client.fetch(
+            `count(*[_type == "newsItem" && featured == true && _id != $currentDocId])`,
+            {currentDocId},
+          )
+
+          if (featuredCount >= 4) {
+            return 'Maximum of 4 featured items allowed. Please unfeature another item first.'
+          }
+
+          return true
+        }),
+    }),
+    defineField({
       name: 'featuredImage',
       title: 'Featured Image',
       type: 'image',
@@ -46,9 +74,9 @@ export default defineType({
       name: 'content',
       title: 'Content',
       type: 'array',
-      description: 'News content with text and images',
+      description: 'News content with text, images, and YouTube videos',
       of: [
-        // Text Block - NO defineField here
+        // Text Block
         {
           name: 'textBlock',
           title: 'Text Block',
@@ -74,7 +102,7 @@ export default defineType({
             },
           },
         },
-        // Image Block - NO defineField here
+        // Image Block
         {
           name: 'imageBlock',
           title: 'Image Block',
@@ -117,6 +145,58 @@ export default defineType({
             },
           },
         },
+        // YouTube Video Block
+        {
+          name: 'youtubeBlock',
+          title: 'YouTube Video Block',
+          type: 'object',
+          fields: [
+            {
+              name: 'url',
+              title: 'YouTube URL',
+              type: 'url',
+              description: 'YouTube video URL (e.g., https://www.youtube.com/watch?v=VIDEO_ID)',
+              validation: (Rule: any) =>
+                Rule.required().custom((value: any) => {
+                  if (!value) return 'YouTube URL is required'
+                  // Basic YouTube URL validation
+                  const youtubeRegex =
+                    /^https?:\/\/(www\.)?(youtube\.com\/(watch\?v=|embed\/)|youtu\.be\/)/
+                  if (!youtubeRegex.test(value)) {
+                    return 'Please enter a valid YouTube URL'
+                  }
+                  return true
+                }),
+            },
+            {
+              name: 'title',
+              title: 'Video Title',
+              type: 'string',
+              description: 'Optional custom title for the video',
+            },
+            {
+              name: 'caption',
+              title: 'Caption',
+              type: 'string',
+              description: 'Optional caption or description',
+            },
+          ],
+          preview: {
+            select: {
+              title: 'title',
+              caption: 'caption',
+              url: 'url',
+            },
+            prepare(selection: any) {
+              const {title, caption} = selection
+              return {
+                title: title || caption || 'YouTube Video',
+                subtitle: 'YouTube Video Block',
+                media: undefined, // Don't try to show YouTube thumbnails in preview
+              }
+            },
+          },
+        },
       ],
       validation: (Rule) => Rule.required().min(1),
     }),
@@ -137,15 +217,6 @@ export default defineType({
       },
       validation: (Rule) => Rule.required(),
     }),
-    defineField({
-      name: 'tags',
-      title: 'Tags',
-      type: 'array',
-      of: [{type: 'string'}],
-      options: {
-        layout: 'tags',
-      },
-    }),
   ],
   preview: {
     select: {
@@ -153,17 +224,26 @@ export default defineType({
       author: 'author',
       media: 'featuredImage',
       date: 'publishedAt',
+      featured: 'featured',
     },
     prepare(selection) {
-      const {title, author, media, date} = selection
+      const {title, author, media, date, featured} = selection
       return {
-        title,
+        title: featured ? `⭐ ${title}` : title,
         subtitle: `by ${author} • ${new Date(date).toLocaleDateString()}`,
         media,
       }
     },
   },
   orderings: [
+    {
+      title: 'Featured First',
+      name: 'featuredFirst',
+      by: [
+        {field: 'featured', direction: 'desc'},
+        {field: 'publishedAt', direction: 'desc'},
+      ],
+    },
     {
       title: 'Published Date, New',
       name: 'publishedAtDesc',
