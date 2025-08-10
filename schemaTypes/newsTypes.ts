@@ -67,6 +67,12 @@ export default defineType({
           type: 'string',
           validation: (Rule: any) => Rule.required(),
         },
+        {
+          name: 'title',
+          title: 'Image Title',
+          type: 'string',
+          description: 'Optional title for the image (used for tooltips and captions)',
+        },
       ],
       validation: (Rule) => Rule.required(),
     }),
@@ -85,19 +91,81 @@ export default defineType({
             {
               name: 'text',
               title: 'Text',
-              type: 'text',
-              validation: (Rule: any) => Rule.required(),
+              type: 'array',
+              of: [
+                {
+                  type: 'block',
+                  // Specify which styles are allowed
+                  styles: [
+                    {title: 'Normal', value: 'normal'},
+                    {title: 'H1', value: 'h1'},
+                    {title: 'H2', value: 'h2'},
+                    {title: 'H3', value: 'h3'},
+                    {title: 'H4', value: 'h4'},
+                    {title: 'Quote', value: 'blockquote'},
+                  ],
+                  // Specify which list types are allowed
+                  lists: [
+                    {title: 'Bullet', value: 'bullet'},
+                    {title: 'Number', value: 'number'},
+                  ],
+                  // Specify which marks (inline formatting) are allowed
+                  marks: {
+                    decorators: [
+                      {title: 'Strong', value: 'strong'},
+                      {title: 'Emphasis', value: 'em'},
+                      {title: 'Underline', value: 'underline'},
+                      {title: 'Strike', value: 'strike-through'},
+                    ],
+                    annotations: [
+                      {
+                        name: 'link',
+                        type: 'object',
+                        title: 'External Link',
+                        fields: [
+                          {
+                            name: 'href',
+                            type: 'url',
+                            title: 'URL',
+                            validation: (Rule) =>
+                              Rule.uri({
+                                allowRelative: false,
+                                scheme: ['http', 'https', 'mailto', 'tel'],
+                              }),
+                          },
+                          {
+                            name: 'blank',
+                            type: 'boolean',
+                            title: 'Open in new tab',
+                            description: 'Read https://css-tricks.com/use-target_blank/',
+                            initialValue: true,
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                },
+              ],
+              validation: (Rule) => Rule.required(),
             },
           ],
           preview: {
             select: {
-              text: 'text',
+              blocks: 'text',
             },
-            prepare(selection: any) {
-              const {text} = selection
+            prepare(selection) {
+              const {blocks} = selection
+              const block = (blocks || []).find((block: {_type: string}) => block._type === 'block')
+              const plainText = block
+                ? block.children
+                    ?.filter((child: {_type: string}) => child._type === 'span')
+                    ?.map((span: {text: any}) => span.text)
+                    ?.join('') || ''
+                : ''
+
               return {
-                title: text?.substring(0, 50) + '...',
-                subtitle: 'Text Block',
+                title: plainText?.substring(0, 50) + (plainText?.length > 50 ? '...' : ''),
+                subtitle: 'Rich Text Block',
               }
             },
           },
