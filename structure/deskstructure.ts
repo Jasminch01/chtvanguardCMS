@@ -158,6 +158,53 @@ export const structure = (S: StructureBuilder) =>
             ]),
         ),
 
+      S.listItem()
+        .title('Video Content')
+        .icon(() => '🎥')
+        .child(
+          S.list()
+            .title('Video Content Management')
+            .items([
+              // Featured Videos
+              S.listItem()
+                .title('Featured Videos')
+                .icon(() => '⭐')
+                .child(
+                  S.documentList()
+                    .title('Featured Videos')
+                    .filter('_type == "videocontent" && featured == true')
+                    .defaultOrdering([{field: 'publishedAt', direction: 'desc'}])
+                    .canHandleIntent((intentName, params) => {
+                      return intentName === 'create' && params.type === 'videocontent'
+                    }),
+                ),
+
+              // All Videos
+              S.listItem()
+                .title('All Videos')
+                .icon(() => '📹')
+                .child(
+                  S.documentList()
+                    .title('All Video Content')
+                    .filter('_type == "videocontent"')
+                    .defaultOrdering([{field: 'publishedAt', direction: 'desc'}])
+                    .canHandleIntent((intentName, params) => {
+                      return intentName === 'create' && params.type === 'videocontent'
+                    }),
+                ),
+
+              // Video Drafts
+              S.listItem()
+                .title('Video Drafts')
+                .icon(() => '📝')
+                .child(
+                  S.documentList()
+                    .title('Video Drafts')
+                    .filter('_type == "videocontent" && _id in path("drafts.**")')
+                    .defaultOrdering([{field: '_updatedAt', direction: 'desc'}]),
+                ),
+            ]),
+        ),
       // Add a divider
       S.divider(),
 

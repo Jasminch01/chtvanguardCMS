@@ -1,8 +1,8 @@
 import {defineType, defineField} from 'sanity'
 
 export default defineType({
-  name: 'newsItem',
-  title: 'News',
+  name: 'videocontent',
+  title: 'Video Content',
   type: 'document',
   liveEdit: false, // This enables draft/publish workflow
   fields: [
@@ -52,35 +52,36 @@ export default defineType({
           return true
         }),
     }),
-    defineField({
-      name: 'featuredImage',
-      title: 'Featured Image',
-      type: 'image',
-      description: 'Main image for previews and social sharing',
-      options: {
-        hotspot: true,
-      },
+    // YouTube Video Block
+    {
+      name: 'youtubeBlock',
+      title: 'YouTube Video Block',
+      type: 'object',
       fields: [
         {
-          name: 'alt',
-          title: 'Alt Text',
-          type: 'string',
-          validation: (Rule: any) => Rule.required(),
-        },
-        {
-          name: 'title',
-          title: 'Image Title',
-          type: 'string',
-          description: 'Optional title for the image (used for tooltips and captions)',
+          name: 'url',
+          title: 'YouTube URL',
+          type: 'url',
+          description: 'YouTube video URL (e.g., https://www.youtube.com/watch?v=VIDEO_ID)',
+          validation: (Rule: any) =>
+            Rule.required().custom((value: any) => {
+              if (!value) return 'YouTube URL is required'
+              // Basic YouTube URL validation
+              const youtubeRegex =
+                /^https?:\/\/(www\.)?(youtube\.com\/(watch\?v=|embed\/)|youtu\.be\/)/
+              if (!youtubeRegex.test(value)) {
+                return 'Please enter a valid YouTube URL'
+              }
+              return true
+            }),
         },
       ],
-      validation: (Rule) => Rule.required(),
-    }),
+    },
     defineField({
-      name: 'content',
-      title: 'Content',
+      name: 'description',
+      title: 'Video Description',
       type: 'array',
-      description: 'News content with text, images, and YouTube videos',
+      description: 'Description of video content',
       of: [
         // Text Block
         {
@@ -170,120 +171,8 @@ export default defineType({
             },
           },
         },
-        // Image Block
-        {
-          name: 'imageBlock',
-          title: 'Image Block',
-          type: 'object',
-          fields: [
-            {
-              name: 'image',
-              title: 'Image',
-              type: 'image',
-              options: {
-                hotspot: true,
-              },
-              validation: (Rule: any) => Rule.required(),
-            },
-            {
-              name: 'alt',
-              title: 'Alt Text',
-              type: 'string',
-              validation: (Rule: any) => Rule.required(),
-            },
-            {
-              name: 'caption',
-              title: 'Caption',
-              type: 'string',
-            },
-          ],
-          preview: {
-            select: {
-              media: 'image',
-              caption: 'caption',
-              alt: 'alt',
-            },
-            prepare(selection: any) {
-              const {media, caption, alt} = selection
-              return {
-                title: caption || alt || 'Image',
-                subtitle: 'Image Block',
-                media,
-              }
-            },
-          },
-        },
-        // YouTube Video Block
-        {
-          name: 'youtubeBlock',
-          title: 'YouTube Video Block',
-          type: 'object',
-          fields: [
-            {
-              name: 'url',
-              title: 'YouTube URL',
-              type: 'url',
-              description: 'YouTube video URL (e.g., https://www.youtube.com/watch?v=VIDEO_ID)',
-              validation: (Rule: any) =>
-                Rule.required().custom((value: any) => {
-                  if (!value) return 'YouTube URL is required'
-                  // Basic YouTube URL validation
-                  const youtubeRegex =
-                    /^https?:\/\/(www\.)?(youtube\.com\/(watch\?v=|embed\/)|youtu\.be\/)/
-                  if (!youtubeRegex.test(value)) {
-                    return 'Please enter a valid YouTube URL'
-                  }
-                  return true
-                }),
-            },
-            {
-              name: 'title',
-              title: 'Video Title',
-              type: 'string',
-              description: 'Optional custom title for the video',
-            },
-            {
-              name: 'caption',
-              title: 'Caption',
-              type: 'string',
-              description: 'Optional caption or description',
-            },
-          ],
-          preview: {
-            select: {
-              title: 'title',
-              caption: 'caption',
-              url: 'url',
-            },
-            prepare(selection: any) {
-              const {title, caption} = selection
-              return {
-                title: title || caption || 'YouTube Video',
-                subtitle: 'YouTube Video Block',
-                media: undefined, // Don't try to show YouTube thumbnails in preview
-              }
-            },
-          },
-        },
       ],
       validation: (Rule) => Rule.required().min(1),
-    }),
-    defineField({
-      name: 'category',
-      title: 'Category',
-      type: 'string',
-      options: {
-        list: [
-          {title: 'Rangamati', value: 'rangamati'},
-          {title: 'Khagrachari', value: 'khagrachari'},
-          {title: 'Bandarban', value: 'bandarban'},
-          {title: 'National', value: 'national'},
-          {title: 'International', value: 'international'},
-          {title: 'Press Release', value: 'press-release'},
-          {title: 'Opinion', value: 'opinion'},
-        ],
-      },
-      validation: (Rule) => Rule.required(),
     }),
   ],
   preview: {
