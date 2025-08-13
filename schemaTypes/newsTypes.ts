@@ -32,25 +32,75 @@ export default defineType({
       initialValue: false,
       validation: (Rule) =>
         Rule.custom(async (value, context) => {
-          // Only validate if trying to set to true
+          // If not featured, always valid
           if (!value) return true
 
-          // Get the current document ID to exclude it from the count
-          const currentDocId = context.document?._id?.replace('drafts.', '')
+          const currentDocId = context.document?._id?.replace(/^drafts\./, '')
 
-          // Query for currently featured items
-          const client = context.getClient({apiVersion: '2023-05-03'})
-          const featuredCount = await client.fetch(
-            `count(*[(_type == "newsItem" || _type == "videocontent") && featured == true && _id != $currentDocId])`,
-            {currentDocId},
-          )
-
-          if (featuredCount >= 4) {
-            return 'Maximum of 4 featured items allowed. Please unfeature another item first.'
+          // Type guard: ensure we have a valid document ID
+          if (!currentDocId) {
+            return 'Document ID is required'
           }
 
-          return true
+          const client = context.getClient({apiVersion: '2023-05-03'})
+
+          try {
+            // Fetch all currently featured items, ordered by featuredAt (oldest first)
+            const featuredItems = await client.fetch(
+              `*[
+            (_type == "newsItem" || _type == "videocontent")
+            && featured == true
+            && _id != $currentDocId
+            && defined(featuredAt)
+          ] | order(featuredAt asc)`,
+              {currentDocId},
+            )
+
+            console.log(`📊 Current featured items: ${featuredItems.length}`)
+
+            // If we already have 4 featured items, remove the oldest one
+            if (featuredItems.length >= 4) {
+              const oldestItem = featuredItems[0]
+              const oldestItemId = oldestItem._id.replace(/^drafts\./, '')
+
+              console.log(`🗑️ Removing oldest featured item: ${oldestItemId}`)
+
+              // Unfeature the oldest item
+              await client
+                .patch(oldestItemId)
+                .set({
+                  featured: false,
+                  featuredAt: null,
+                })
+                .commit({autoGenerateArrayKeys: true})
+
+              console.log(`✅ Successfully unfeatured oldest item: ${oldestItemId}`)
+            }
+
+            // Set featuredAt timestamp for the current item
+            const currentTime = new Date().toISOString()
+
+            await client
+              .patch(currentDocId)
+              .set({featuredAt: currentTime})
+              .commit({autoGenerateArrayKeys: true})
+
+            console.log(`⭐ Featured new item: ${currentDocId} at ${currentTime}`)
+
+            return true // Validation passes
+          } catch (error) {
+            console.error('❌ Error in featured items management:', error)
+            return 'Failed to manage featured items. Please try again.'
+          }
         }),
+    }),
+    // Optional: Add the featuredAt field to schema if not already present
+    defineField({
+      name: 'featuredAt',
+      title: 'Featured At',
+      type: 'datetime',
+      description: 'Timestamp when this item was featured',
+      hidden: true, // Hide from editor UI since it's managed automatically
     }),
     defineField({
       name: 'featuredImage',
@@ -80,7 +130,7 @@ export default defineType({
       name: 'content',
       title: 'Content',
       type: 'array',
-      description: 'News content with text, images, and YouTube videos',
+      description: 'News content with text, images, YouTube videos, and highlight blocks',
       of: [
         // Text Block
         {
@@ -170,6 +220,161 @@ export default defineType({
             },
           },
         },
+
+        // Highlight Block - NEW
+        {
+          name: 'highlightBlock',
+          title: 'Highlight Block',
+          type: 'object',
+          fields: [
+            {
+              name: 'text',
+              title: 'Highlighted Text',
+              type: 'array',
+              of: [
+                {
+                  type: 'block',
+                  styles: [
+                    {title: 'Normal', value: 'normal'},
+                    {title: 'H1', value: 'h1'},
+                    {title: 'H2', value: 'h2'},
+                    {title: 'H3', value: 'h3'},
+                    {title: 'H4', value: 'h4'},
+                  ],
+                  lists: [
+                    {title: 'Bullet', value: 'bullet'},
+                    {title: 'Number', value: 'number'},
+                  ],
+                  marks: {
+                    decorators: [
+                      {title: 'Strong', value: 'strong'},
+                      {title: 'Emphasis', value: 'em'},
+                      {title: 'Underline', value: 'underline'},
+                    ],
+                    annotations: [
+                      {
+                        name: 'link',
+                        type: 'object',
+                        title: 'External Link',
+                        fields: [
+                          {
+                            name: 'href',
+                            type: 'url',
+                            title: 'URL',
+                          },
+                          {
+                            name: 'blank',
+                            type: 'boolean',
+                            title: 'Open in new tab',
+                            initialValue: true,
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                },
+              ],
+              validation: (Rule) => Rule.required(),
+            },
+            {
+              name: 'backgroundColor',
+              title: 'Background Color',
+              type: 'string',
+              options: {
+                list: [
+                  {title: 'Yellow Highlight', value: '#fff3cd'},
+                  {title: 'Blue Highlight', value: '#d1ecf1'},
+                  {title: 'Green Highlight', value: '#d4edda'},
+                  {title: 'Red Highlight', value: '#f8d7da'},
+                  {title: 'Orange Highlight', value: '#ffeaa7'},
+                  {title: 'Purple Highlight', value: '#e2d5f1'},
+                  {title: 'Gray Highlight', value: '#e9ecef'},
+                  {title: 'Custom', value: 'custom'},
+                ],
+                layout: 'dropdown',
+              },
+              initialValue: '#fff3cd',
+              validation: (Rule) => Rule.required(),
+            },
+            {
+              name: 'customColor',
+              title: 'Custom Background Color',
+              type: 'color',
+              description: 'Only used when "Custom" is selected above',
+              options: {
+                disableAlpha: false,
+              },
+              hidden: ({parent}) => parent?.backgroundColor !== 'custom',
+            },
+            {
+              name: 'borderColor',
+              title: 'Border Color (Optional)',
+              type: 'string',
+              options: {
+                list: [
+                  {title: 'None', value: 'none'},
+                  {title: 'Light Gray', value: '#dee2e6'},
+                  {title: 'Yellow', value: '#ffc107'},
+                  {title: 'Blue', value: '#17a2b8'},
+                  {title: 'Green', value: '#28a745'},
+                  {title: 'Red', value: '#dc3545'},
+                  {title: 'Custom', value: 'custom'},
+                ],
+                layout: 'dropdown',
+              },
+              initialValue: 'none',
+            },
+            {
+              name: 'customBorderColor',
+              title: 'Custom Border Color',
+              type: 'color',
+              description: 'Only used when "Custom" border is selected above',
+              options: {
+                disableAlpha: false,
+              },
+              hidden: ({parent}) => parent?.borderColor !== 'custom',
+            },
+            {
+              name: 'padding',
+              title: 'Padding',
+              type: 'string',
+              options: {
+                list: [
+                  {title: 'Small', value: 'small'},
+                  {title: 'Medium', value: 'medium'},
+                  {title: 'Large', value: 'large'},
+                ],
+                layout: 'radio',
+              },
+              initialValue: 'medium',
+            },
+          ],
+          preview: {
+            select: {
+              blocks: 'text',
+              backgroundColor: 'backgroundColor',
+              customColor: 'customColor',
+            },
+            prepare(selection) {
+              const {blocks, backgroundColor, customColor} = selection
+              const block = (blocks || []).find((block: {_type: string}) => block._type === 'block')
+              const plainText = block
+                ? block.children
+                    ?.filter((child: {_type: string}) => child._type === 'span')
+                    ?.map((span: {text: any}) => span.text)
+                    ?.join('') || ''
+                : ''
+
+              const bgColor = backgroundColor === 'custom' ? customColor?.hex : backgroundColor
+
+              return {
+                title: plainText?.substring(0, 50) + (plainText?.length > 50 ? '...' : ''),
+                subtitle: `Highlight Block (${bgColor || 'Default'})`,
+              }
+            },
+          },
+        },
+
         // Image Block
         {
           name: 'imageBlock',
@@ -213,6 +418,7 @@ export default defineType({
             },
           },
         },
+
         // YouTube Video Block
         {
           name: 'youtubeBlock',
