@@ -205,7 +205,18 @@ export const structure = (S: StructureBuilder) =>
                 ),
             ]),
         ),
+
+      S.listItem()
+        .title('Socials')
+        .icon(() => '📱')
+        .child(
+          S.documentList()
+            .title('socials')
+            .filter('_type == "socials"')
+            .defaultOrdering([{field: '_updatedAt', direction: 'desc'}]),
+        ),
       // Add a divider
+
       S.divider(),
 
       // Quick Actions
